@@ -56,6 +56,12 @@ export const booksApi = {
     return response.data
   },
 
+  // Generate audio for all chapters in a book
+  generateAllAudio: async (bookId: string) => {
+    const response = await apiClient.post(`/books/${bookId}/chapters/generate`)
+    return response.data
+  },
+
   // Download book as ZIP
   downloadBook: async (bookId: string) => {
     const response = await apiClient.get(`/books/${bookId}/download`, {

@@ -11,13 +11,14 @@ interface ProgressTrackerProps {
 export default function ProgressTracker({ bookId }: ProgressTrackerProps) {
   const queryClient = useQueryClient()
 
-  const { data: jobs, isLoading } = useQuery({
+  const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['jobs', bookId],
     queryFn: () => jobsApi.getBookJobs(bookId),
     refetchInterval: (query) => {
       const data = query.state.data as ProcessingJob[] | undefined
-      const hasActiveJobs = data?.some(
-        (job) => job.status === 'pending' || job.status === 'processing'
+      if (!Array.isArray(data)) return false
+      const hasActiveJobs = data.some(
+        (job) => job.status === 'pending' || job.status === 'running'
       )
       return hasActiveJobs ? 2000 : false // Poll every 2s if active jobs
     },
@@ -32,11 +33,11 @@ export default function ProgressTracker({ bookId }: ProgressTrackerProps) {
     }
   }, [jobs, bookId, queryClient])
 
-  if (isLoading || !jobs || jobs.length === 0) {
+  if (isLoading || !Array.isArray(jobs) || jobs.length === 0) {
     return null
   }
 
-  const activeJobs = jobs.filter((job) => job.status === 'pending' || job.status === 'processing')
+  const activeJobs = jobs.filter((job) => job.status === 'pending' || job.status === 'running')
 
   if (activeJobs.length === 0) {
     return null
@@ -62,12 +63,14 @@ function JobProgress({ job }: { job: ProcessingJob }) {
     switch (job.status) {
       case 'pending':
         return <Clock className="w-5 h-5 text-gray-400" />
-      case 'processing':
+      case 'running':
         return <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
       case 'completed':
         return <CheckCircle className="w-5 h-5 text-green-600" />
       case 'failed':
         return <XCircle className="w-5 h-5 text-red-600" />
+      default:
+        return <Clock className="w-5 h-5 text-gray-400" />
     }
   }
 
@@ -88,12 +91,14 @@ function JobProgress({ job }: { job: ProcessingJob }) {
     switch (job.status) {
       case 'pending':
         return 'bg-gray-200 dark:bg-gray-600'
-      case 'processing':
+      case 'running':
         return 'bg-blue-600'
       case 'completed':
         return 'bg-green-600'
       case 'failed':
         return 'bg-red-600'
+      default:
+        return 'bg-gray-200 dark:bg-gray-600'
     }
   }
 

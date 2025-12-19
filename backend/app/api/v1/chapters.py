@@ -5,15 +5,15 @@ from typing import List
 from app.database import get_db
 from app.models.chapter import Chapter
 from app.models.processing_job import ProcessingJob, JobType, JobStatus
-from app.schemas.chapter import ChapterRead, ChapterList
+from app.schemas.chapter import ChapterRead, ChapterList, ChapterUpdate
 from app.schemas.job import JobRead
-from app.tasks.chapter_tasks import format_chapter_task, format_all_chapters_task
-from app.tasks.audio_tasks import generate_audio_task, generate_book_audio_task
+from app.tasks.chapter_tasks import format_chapter_sync, format_all_chapters_sync
+from app.tasks.audio_tasks import generate_audio_sync, generate_book_audio_sync
 
 router = APIRouter()
 
 
-@router.get("/{book_id}/chapters", response_model=ChapterList)
+@router.get("/books/{book_id}/chapters", response_model=ChapterList)
 async def list_chapters(book_id: str, db: Session = Depends(get_db)):
     """
     List all chapters for a book
@@ -53,6 +53,34 @@ async def get_chapter(chapter_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Chapter with id {chapter_id} not found"
         )
+    return chapter
+
+
+@router.patch("/chapters/{chapter_id}/exclude", response_model=ChapterRead)
+async def toggle_chapter_exclude(chapter_id: str, db: Session = Depends(get_db)):
+    """
+    Toggle the excluded status of a chapter.
+
+    Excluded chapters are skipped during batch processing (format all, generate all audio).
+
+    Args:
+        chapter_id: Chapter UUID
+        db: Database session
+
+    Returns:
+        ChapterRead: Updated chapter details
+    """
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    if not chapter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Chapter with id {chapter_id} not found"
+        )
+
+    chapter.excluded = not chapter.excluded
+    db.commit()
+    db.refresh(chapter)
+
     return chapter
 
 
@@ -113,18 +141,15 @@ async def format_chapter(chapter_id: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(job)
 
-    # Spawn Celery task
-    task = format_chapter_task.delay(str(chapter.id), str(job.id))
+    # Run formatting synchronously
+    format_chapter_sync(str(chapter.id), str(job.id))
 
-    # Update job with task ID
-    job.celery_task_id = task.id
-    db.commit()
     db.refresh(job)
 
     return job
 
 
-@router.post("/{book_id}/chapters/format", response_model=dict)
+@router.post("/books/{book_id}/chapters/format", response_model=dict)
 async def format_all_chapters(book_id: str, db: Session = Depends(get_db)):
     """
     Start formatting all parsed chapters for a book.
@@ -151,26 +176,25 @@ async def format_all_chapters(book_id: str, db: Session = Depends(get_db)):
             detail=f"Book with id {book_id} not found"
         )
 
-    # Check for parsed chapters
+    # Check for extracted chapters
     chapters_count = db.query(Chapter).filter(
         Chapter.book_id == book_id,
-        Chapter.status == "parsed"
+        Chapter.status == "extracted"
     ).count()
 
     if chapters_count == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No parsed chapters found for this book"
+            detail="No extracted chapters found for this book. Process the book first."
         )
 
-    # Spawn task to format all chapters
-    task = format_all_chapters_task.delay(str(book_id))
+    # Run formatting synchronously for all chapters
+    result = format_all_chapters_sync(str(book_id))
 
     return {
-        "message": f"Started formatting {chapters_count} chapters",
+        "message": f"Formatted {result['chapters_formatted']} chapters",
         "book_id": str(book_id),
-        "task_id": task.id,
-        "chapters_count": chapters_count
+        "chapters_formatted": result['chapters_formatted']
     }
 
 
@@ -251,8 +275,8 @@ async def generate_chapter_audio(
     db.commit()
     db.refresh(job)
 
-    # Spawn Celery task
-    task = generate_audio_task.delay(
+    # Run audio generation synchronously
+    generate_audio_sync(
         chapter_id=str(chapter.id),
         voice=voice,
         language=language,
@@ -261,15 +285,12 @@ async def generate_chapter_audio(
         temperature=temperature,
     )
 
-    # Update job with task ID
-    job.celery_task_id = task.id
-    db.commit()
     db.refresh(job)
 
     return job
 
 
-@router.post("/{book_id}/chapters/generate", response_model=dict)
+@router.post("/books/{book_id}/chapters/generate", response_model=dict)
 async def generate_all_chapters_audio(
     book_id: str,
     voice: str = None,
@@ -316,16 +337,16 @@ async def generate_all_chapters_audio(
             detail="No formatted chapters found for this book"
         )
 
-    # Spawn task to generate audio for all chapters
-    task = generate_book_audio_task.delay(
+    # Run audio generation synchronously for all chapters
+    result = generate_book_audio_sync(
         book_id=str(book_id),
         voice=voice,
         language=language,
     )
 
     return {
-        "message": f"Started audio generation for {chapters_count} chapters",
+        "message": f"Generated audio for {result['chapters_count']} chapters",
         "book_id": str(book_id),
-        "task_id": task.id,
-        "chapters_count": chapters_count
+        "chapters_count": result['chapters_count'],
+        "status": result['status']
     }

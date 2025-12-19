@@ -10,7 +10,7 @@ export const jobsApi = {
 
   // Get all jobs for a book
   getBookJobs: async (bookId: string) => {
-    const response = await apiClient.get<ProcessingJob[]>(`/books/${bookId}/jobs`)
-    return response.data
+    const response = await apiClient.get<{ jobs: ProcessingJob[]; total: number }>(`/jobs/book/${bookId}`)
+    return response.data.jobs || []
   },
 }

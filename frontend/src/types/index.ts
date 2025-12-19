@@ -24,7 +24,8 @@ export interface Chapter {
   formatted_text?: string;
   word_count: number;
   character_count: number;
-  status: 'pending' | 'formatting' | 'formatted' | 'generating' | 'completed' | 'failed';
+  status: 'pending' | 'extracted' | 'formatting' | 'formatted' | 'generating' | 'completed' | 'failed';
+  excluded: boolean;
   error_message?: string;
   created_at: string;
   updated_at: string;

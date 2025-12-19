@@ -27,4 +27,10 @@ export const chaptersApi = {
     const response = await apiClient.post(`/chapters/${chapterId}/generate`)
     return response.data
   },
+
+  // Toggle chapter exclusion
+  toggleExclude: async (chapterId: string) => {
+    const response = await apiClient.patch<Chapter>(`/chapters/${chapterId}/exclude`)
+    return response.data
+  },
 }

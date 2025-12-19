@@ -1,5 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Enum, Text, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, Integer, DateTime, Enum, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -25,9 +24,9 @@ class JobStatus(str, enum.Enum):
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    book_id = Column(UUID(as_uuid=True), ForeignKey("books.id", ondelete="CASCADE"), nullable=False)
-    chapter_id = Column(UUID(as_uuid=True), ForeignKey("chapters.id", ondelete="CASCADE"))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    book_id = Column(String(36), ForeignKey("books.id", ondelete="CASCADE"), nullable=False)
+    chapter_id = Column(String(36), ForeignKey("chapters.id", ondelete="CASCADE"))
     job_type = Column(Enum(JobType), nullable=False)
     celery_task_id = Column(String(255))
     status = Column(Enum(JobStatus), default=JobStatus.PENDING, nullable=False)
@@ -35,7 +34,7 @@ class ProcessingJob(Base):
     error_message = Column(Text)
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)
-    metadata = Column(JSONB, default={})
+    job_metadata = Column(JSON, default={})
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -40,11 +40,35 @@ export const useDeleteBook = () => {
   })
 }
 
+export const useProcessBook = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (bookId: string) => booksApi.processBook(bookId),
+    onSuccess: (_data, bookId) => {
+      queryClient.invalidateQueries({ queryKey: ['book', bookId] })
+      queryClient.invalidateQueries({ queryKey: ['chapters', bookId] })
+    },
+  })
+}
+
 export const useFormatAllChapters = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (bookId: string) => booksApi.formatAllChapters(bookId),
+    onSuccess: (_data, bookId) => {
+      queryClient.invalidateQueries({ queryKey: ['book', bookId] })
+      queryClient.invalidateQueries({ queryKey: ['chapters', bookId] })
+    },
+  })
+}
+
+export const useGenerateAllAudio = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (bookId: string) => booksApi.generateAllAudio(bookId),
     onSuccess: (_data, bookId) => {
       queryClient.invalidateQueries({ queryKey: ['book', bookId] })
       queryClient.invalidateQueries({ queryKey: ['chapters', bookId] })

@@ -1,5 +1,5 @@
 """
-Celery tasks for audio generation using TTS.
+Synchronous tasks for audio generation using TTS.
 Handles chapter-to-audio conversion with automatic chunking and file management.
 """
 
@@ -10,7 +10,6 @@ from typing import Optional
 import asyncio
 from sqlalchemy.orm import Session
 
-from app.tasks.celery_app import celery_app
 from app.database import SessionLocal
 from app.models.chapter import Chapter
 from app.models.audio_file import AudioFile
@@ -94,18 +93,11 @@ def update_job_progress(
     if job:
         job.progress_percent = progress_percent
         if metadata:
-            job.metadata = {**(job.metadata or {}), **metadata}
+            job.job_metadata = {**(job.job_metadata or {}), **metadata}
         db.commit()
 
 
-@celery_app.task(
-    bind=True,
-    name="generate_audio_task",
-    max_retries=3,
-    default_retry_delay=60,
-)
-def generate_audio_task(
-    self,
+def generate_audio_sync(
     chapter_id: str,
     voice: Optional[str] = None,
     language: Optional[str] = None,
@@ -114,7 +106,7 @@ def generate_audio_task(
     temperature: float = 0.9,
 ):
     """
-    Generate audio from formatted chapter text using TTS.
+    Generate audio from formatted chapter text using TTS (synchronous version).
 
     Args:
         chapter_id: Chapter UUID
@@ -134,6 +126,7 @@ def generate_audio_task(
     """
     db = SessionLocal()
     job_id = None
+    chapter = None
 
     try:
         # Load chapter
@@ -148,7 +141,6 @@ def generate_audio_task(
             book_id=chapter.book_id,
             chapter_id=chapter.id,
             job_type=JobType.GENERATE_AUDIO,
-            celery_task_id=self.request.id,
             status=JobStatus.RUNNING,
             progress_percent=0,
             metadata={
@@ -177,7 +169,7 @@ def generate_audio_task(
         if not chapter.formatted_text:
             raise ValueError(
                 f"Chapter {chapter_id} has no formatted_text. "
-                "Run format_chapter_task first."
+                "Run format_chapter_sync first."
             )
 
         # Configure TTS
@@ -248,11 +240,12 @@ def generate_audio_task(
         db.commit()
 
         # Update job to completed
+        job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
         job.status = JobStatus.COMPLETED
         job.progress_percent = 100
         job.completed_at = datetime.utcnow()
-        job.metadata = {
-            **job.metadata,
+        job.job_metadata = {
+            **(job.job_metadata or {}),
             "audio_files_count": len(audio_files),
             "total_size_bytes": sum(af.file_size for af in audio_files),
         }
@@ -287,32 +280,26 @@ def generate_audio_task(
                 job.completed_at = datetime.utcnow()
                 db.commit()
 
-        # Retry logic
-        if self.request.retries < self.max_retries:
-            logger.info(f"Retrying audio generation (attempt {self.request.retries + 1})")
-            raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
-
         raise
 
     finally:
         db.close()
 
 
-@celery_app.task(name="generate_book_audio_task")
-def generate_book_audio_task(
+def generate_book_audio_sync(
     book_id: str,
     voice: Optional[str] = None,
     language: Optional[str] = None,
 ):
     """
-    Generate audio for all chapters in a book.
+    Generate audio for all chapters in a book (synchronous version).
 
     Args:
         book_id: Book UUID
         voice: Optional voice name
         language: Optional language code
 
-    This task spawns individual generate_audio_task for each chapter.
+    This function processes each chapter sequentially.
     """
     db = SessionLocal()
 
@@ -329,30 +316,35 @@ def generate_book_audio_task(
         if not chapters:
             raise ValueError(
                 f"No formatted chapters found for book {book_id}. "
-                "Run format_chapter_task first."
+                "Run format_chapter_sync first."
             )
 
         logger.info(f"Generating audio for {len(chapters)} chapters in book {book_id}")
 
-        # Queue tasks for each chapter
-        task_ids = []
+        # Process each chapter sequentially
+        results = []
         for chapter in chapters:
-            task = generate_audio_task.delay(
-                chapter_id=str(chapter.id),
+            chapter_id = str(chapter.id)
+            db.close()  # Close session before calling sync function
+
+            result = generate_audio_sync(
+                chapter_id=chapter_id,
                 voice=voice,
                 language=language,
             )
-            task_ids.append(task.id)
+            results.append(result)
+
+            db = SessionLocal()  # Reopen for next iteration
 
         return {
             "book_id": book_id,
             "chapters_count": len(chapters),
-            "task_ids": task_ids,
-            "status": "queued",
+            "results": results,
+            "status": "completed",
         }
 
     except Exception as e:
-        logger.error(f"Failed to queue audio generation for book {book_id}: {e}")
+        logger.error(f"Failed to generate audio for book {book_id}: {e}")
         raise
 
     finally:

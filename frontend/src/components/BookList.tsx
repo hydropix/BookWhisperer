@@ -35,10 +35,11 @@ export default function BookList() {
     try {
       await deleteMutation.mutateAsync(bookToDelete.id)
       toast.success('Book deleted', `"${bookToDelete.title}" has been removed`)
-      setBookToDelete(null)
     } catch (error) {
       toast.error('Delete failed', 'Unable to delete the book. Please try again.')
       console.error('Delete failed:', error)
+    } finally {
+      setBookToDelete(null)
     }
   }
 
@@ -76,7 +77,10 @@ export default function BookList() {
     )
   }
 
-  if (!data?.items || data.items.length === 0) {
+  // API returns 'books' array, not 'items'
+  const books = (data as any)?.books || data?.items || []
+
+  if (books.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
         <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
@@ -99,7 +103,7 @@ export default function BookList() {
       </div>
 
       <div className="divide-y divide-gray-200 dark:divide-gray-700">
-        {data.items.map((book: Book) => (
+        {books.map((book: Book) => (
           <div
             key={book.id}
             onClick={() => handleBookClick(book.id)}
@@ -156,27 +160,31 @@ export default function BookList() {
       </div>
 
       {/* Pagination */}
-      {data.pages > 1 && (
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-gray-700 dark:text-gray-300">
-            Page {page} of {data.pages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(data.pages, p + 1))}
-            disabled={page === data.pages}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-      )}
+      {(() => {
+        const totalPages = data.pages || Math.ceil((data.total || 0) / (data.page_size || 20))
+        if (totalPages <= 1) return null
+        return (
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        )
+      })()}
 
       {/* Confirmation Dialog */}
       <ConfirmDialog

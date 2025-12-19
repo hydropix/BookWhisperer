@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { BookOpen, FileText, Zap, Loader2 } from 'lucide-react'
-import { useFormatAllChapters } from '../hooks/useBooks'
+import { BookOpen, FileText, Zap, Loader2, Volume2, Play } from 'lucide-react'
+import { useProcessBook, useFormatAllChapters, useGenerateAllAudio } from '../hooks/useBooks'
 import { useToast } from '../hooks/useToast'
 import { ConfirmDialog } from './ConfirmDialog'
 import type { Book } from '../types'
@@ -10,29 +10,43 @@ interface BookDetailsProps {
 }
 
 const statusColors = {
-  pending: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+  uploaded: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
   parsing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
   parsed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   formatting: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  formatted: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   generating: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
   completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
 }
 
 export default function BookDetails({ book }: BookDetailsProps) {
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [showFormatDialog, setShowFormatDialog] = useState(false)
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false)
+  const processMutation = useProcessBook()
   const formatMutation = useFormatAllChapters()
+  const generateMutation = useGenerateAllAudio()
   const toast = useToast()
 
+  const handleProcess = async () => {
+    try {
+      await processMutation.mutateAsync(book.id)
+      toast.success('Processing started', 'Parsing book and extracting chapters...')
+    } catch (error) {
+      toast.error('Processing failed', 'Unable to process book. Please try again.')
+      console.error('Process failed:', error)
+    }
+  }
+
   const handleFormatClick = () => {
-    setShowConfirmDialog(true)
+    setShowFormatDialog(true)
   }
 
   const handleConfirmFormat = async () => {
     try {
       await formatMutation.mutateAsync(book.id)
       toast.success('Formatting started', `Processing ${book.total_chapters} chapters`)
-      setShowConfirmDialog(false)
+      setShowFormatDialog(false)
     } catch (error) {
       toast.error('Formatting failed', 'Unable to start formatting. Please try again.')
       console.error('Format failed:', error)
@@ -40,10 +54,31 @@ export default function BookDetails({ book }: BookDetailsProps) {
   }
 
   const handleCancelFormat = () => {
-    setShowConfirmDialog(false)
+    setShowFormatDialog(false)
   }
 
+  const handleGenerateClick = () => {
+    setShowGenerateDialog(true)
+  }
+
+  const handleConfirmGenerate = async () => {
+    try {
+      await generateMutation.mutateAsync(book.id)
+      toast.success('Audio generation started', `Generating audio for ${book.total_chapters} chapters`)
+      setShowGenerateDialog(false)
+    } catch (error) {
+      toast.error('Audio generation failed', 'Unable to start audio generation. Please try again.')
+      console.error('Generate audio failed:', error)
+    }
+  }
+
+  const handleCancelGenerate = () => {
+    setShowGenerateDialog(false)
+  }
+
+  const canProcess = book.status === 'uploaded'
   const canFormat = book.status === 'parsed' && book.total_chapters > 0
+  const canGenerate = book.status === 'formatted' && book.total_chapters > 0
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -76,25 +111,67 @@ export default function BookDetails({ book }: BookDetailsProps) {
           </div>
         </div>
 
-        {canFormat && (
-          <button
-            onClick={handleFormatClick}
-            disabled={formatMutation.isPending}
-            className="flex items-center space-x-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white rounded-md transition"
-          >
-            {formatMutation.isPending ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Formatting...</span>
-              </>
-            ) : (
-              <>
-                <Zap className="w-5 h-5" />
-                <span>Format All Chapters</span>
-              </>
-            )}
-          </button>
-        )}
+        <div className="flex items-center space-x-3">
+          {canProcess && (
+            <button
+              onClick={handleProcess}
+              disabled={processMutation.isPending}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-md transition"
+            >
+              {processMutation.isPending ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-5 h-5" />
+                  <span>Process Book</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {canFormat && (
+            <button
+              onClick={handleFormatClick}
+              disabled={formatMutation.isPending}
+              className="flex items-center space-x-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white rounded-md transition"
+            >
+              {formatMutation.isPending ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Formatting...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-5 h-5" />
+                  <span>Format All Chapters</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {canGenerate && (
+            <button
+              onClick={handleGenerateClick}
+              disabled={generateMutation.isPending}
+              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-md transition"
+            >
+              {generateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-5 h-5" />
+                  <span>Generate Audio</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -163,9 +240,9 @@ export default function BookDetails({ book }: BookDetailsProps) {
         </div>
       )}
 
-      {/* Confirmation Dialog */}
+      {/* Format Confirmation Dialog */}
       <ConfirmDialog
-        isOpen={showConfirmDialog}
+        isOpen={showFormatDialog}
         title="Format All Chapters"
         message={
           <>
@@ -181,6 +258,26 @@ export default function BookDetails({ book }: BookDetailsProps) {
         onConfirm={handleConfirmFormat}
         onCancel={handleCancelFormat}
         isLoading={formatMutation.isPending}
+      />
+
+      {/* Generate Audio Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showGenerateDialog}
+        title="Generate Audio"
+        message={
+          <>
+            This will generate audio for all <strong>{book.total_chapters} chapters</strong> using text-to-speech.
+            <br />
+            <br />
+            The process may take a long time depending on the book size. You can monitor progress in the tracker below.
+          </>
+        }
+        confirmText="Start Generation"
+        cancelText="Cancel"
+        variant="info"
+        onConfirm={handleConfirmGenerate}
+        onCancel={handleCancelGenerate}
+        isLoading={generateMutation.isPending}
       />
     </div>
   )

@@ -25,7 +25,7 @@ class BookRead(BookBase):
     total_chapters: int
     status: BookStatus
     error_message: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    book_metadata: Dict[str, Any] = {}
     created_at: datetime
     updated_at: datetime
 
@@ -45,4 +45,4 @@ class BookUpdate(BaseModel):
     status: Optional[BookStatus] = None
     total_chapters: Optional[int] = None
     error_message: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    book_metadata: Optional[Dict[str, Any]] = None

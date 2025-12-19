@@ -26,6 +26,7 @@ class ChapterRead(ChapterBase):
     word_count: int
     character_count: int
     status: ChapterStatus
+    excluded: bool = False
     error_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -42,4 +43,5 @@ class ChapterUpdate(BaseModel):
     title: Optional[str] = None
     formatted_text: Optional[str] = None
     status: Optional[ChapterStatus] = None
+    excluded: Optional[bool] = None
     error_message: Optional[str] = None

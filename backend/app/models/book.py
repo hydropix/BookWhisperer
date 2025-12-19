@@ -1,5 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Enum, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, Integer, DateTime, Enum, Text, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -12,7 +11,9 @@ class BookStatus(str, enum.Enum):
     UPLOADED = "uploaded"
     PARSING = "parsing"
     PARSED = "parsed"
-    PROCESSING = "processing"
+    FORMATTING = "formatting"
+    FORMATTED = "formatted"
+    GENERATING = "generating"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -25,7 +26,7 @@ class FileType(str, enum.Enum):
 class Book(Base):
     __tablename__ = "books"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(500), nullable=False)
     author = Column(String(255))
     file_name = Column(String(500), nullable=False)
@@ -34,7 +35,7 @@ class Book(Base):
     total_chapters = Column(Integer, default=0)
     status = Column(Enum(BookStatus), default=BookStatus.UPLOADED, nullable=False)
     error_message = Column(Text)
-    metadata = Column(JSONB, default={})
+    book_metadata = Column(JSON, default={})
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

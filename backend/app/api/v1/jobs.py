@@ -39,7 +39,7 @@ async def get_job(
     return job
 
 
-@router.get("/books/{book_id}/jobs", response_model=JobList)
+@router.get("/book/{book_id}", response_model=JobList)
 async def list_book_jobs(
     book_id: str,
     db: Session = Depends(get_db)

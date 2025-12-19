@@ -9,7 +9,7 @@ from app.models.book import Book, FileType, BookStatus
 from app.schemas.book import BookRead, BookList, BookUpdate
 from app.services.storage import StorageService
 from app.config import get_settings
-from app.tasks.book_tasks import parse_book_task
+from app.tasks.book_tasks import parse_book_sync
 
 router = APIRouter()
 settings = get_settings()
@@ -83,8 +83,8 @@ async def upload_book(
     db.commit()
     db.refresh(book)
 
-    # Automatically trigger parsing task
-    parse_book_task.delay(str(book.id))
+    # Don't parse automatically - let the user trigger it via /process endpoint
+    # This makes upload fast and non-blocking
 
     return book
 
@@ -210,12 +210,13 @@ async def process_book(book_id: str, db: Session = Depends(get_db)):
             detail=f"Book is already being processed (status: {book.status})"
         )
 
-    # Trigger parsing task
-    parse_book_task.delay(book_id)
-
     # Update status
     book.status = BookStatus.PARSING
     db.commit()
+
+    # Trigger parsing (synchronous)
+    parse_book_sync(book_id)
+
     db.refresh(book)
 
     return book
@@ -241,7 +242,7 @@ async def delete_book(book_id: str, db: Session = Depends(get_db)):
     storage_service.delete_file(book.file_path)
 
     # Delete audio directory if exists
-    audio_dir = Path(settings.AUDIO_DIR) / str(book.id)
+    audio_dir = Path(settings.AUDIO_STORAGE_PATH) / str(book.id)
     if audio_dir.exists():
         shutil.rmtree(audio_dir)
 

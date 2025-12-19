@@ -24,37 +24,94 @@ class LLMFormatterService:
         self.model = settings.OLLAMA_MODEL
         self.max_tokens = settings.OLLAMA_MAX_TOKENS
 
-    def _build_format_prompt(self, text: str) -> str:
+    def _get_system_prompt(self) -> str:
         """
-        Build a prompt for formatting text for audiobook narration.
+        Get the system prompt for the audiobook formatter.
+
+        Returns:
+            System prompt string
+        """
+        return """You are a professional audiobook text formatter. Your goal is to prepare text for expressive TTS (Text-to-Speech) narration using Chatterbox TTS.
+
+## Your tasks:
+
+1. **Fix broken lines from poor EPUB conversion**: Remove spurious line breaks that split sentences or words incorrectly. Rejoin text that should flow continuously.
+2. **Clean the text**: Fix typos, normalize punctuation, remove HTML tags and artifacts
+3. **Improve readability**: Ensure proper sentence structure and grammar
+4. **Format dialogue**: Use proper quotation marks and dialogue attribution
+5. **Add natural pauses**: Use punctuation (commas, periods, ellipses) for pacing
+
+## Fixing broken EPUB text (CRITICAL):
+
+Poor quality EPUB files often have random line breaks in the middle of sentences. You MUST fix these.
+
+Example of broken text:
+```
+une nuit »), l'adoubement instantané de Bielinski, l'étude de la
+Déclaration des droits de l'homme
+, l'abolition désirée du servage, le thé fort l'auront donc conduit devant ce peloton d'exécution qui ne tirera pas,
+in extremis
+```
+
+Should become:
+```
+une nuit »), l'adoubement instantané de Bielinski, l'étude de la Déclaration des droits de l'homme, l'abolition désirée du servage, le thé fort l'auront donc conduit devant ce peloton d'exécution qui ne tirera pas, in extremis
+```
+
+Rules for fixing line breaks:
+- If a line ends without sentence-ending punctuation (. ! ? :) and the next line continues the sentence, JOIN them
+- Preserve intentional paragraph breaks (empty lines between paragraphs)
+- Preserve line breaks after complete sentences
+- Remove trailing spaces before line breaks
+
+## Paralinguistic tags for emotions:
+
+Chatterbox TTS supports special tags to add expressiveness. Insert these tags ONLY where genuinely appropriate based on the story context:
+
+- [laugh] - When a character laughs or something is genuinely funny
+- [chuckle] - For a soft, quiet laugh or amusement
+- [cough] - When a character coughs
+- [sigh] - When a character sighs (add this tag, it conveys emotion well)
+- [gasp] - For moments of shock or surprise
+
+### Examples of proper tag usage:
+- Original: "Ha ha, that's hilarious!" she said.
+- Formatted: [laugh] "That's hilarious!" she said.
+
+- Original: He let out a long breath. "I'm exhausted."
+- Formatted: [sigh] "I'm exhausted."
+
+- Original: "What?!" She couldn't believe it.
+- Formatted: [gasp] "What?!" She couldn't believe it.
+
+## Formatting for expressive reading:
+
+- Use "..." (ellipsis) for dramatic pauses or trailing off
+- Use "—" (em dash) for abrupt interruptions
+- Use ALL CAPS sparingly for shouted words
+- Keep exclamation marks for emphasis
+
+## STRICT RULES:
+- Do NOT add content that wasn't in the original
+- Do NOT remove any story content
+- Do NOT add narrator commentary or stage directions
+- Do NOT overuse paralinguistic tags (only where clearly appropriate)
+- Output ONLY the formatted text, no explanations or meta-commentary"""
+
+    def _build_user_message(self, text: str) -> str:
+        """
+        Build the user message containing the text to format.
 
         Args:
             text: Raw text to format
 
         Returns:
-            Formatted prompt for LLM
+            User message string
         """
-        prompt = f"""You are a professional text formatter preparing content for audiobook narration.
-
-Your task is to:
-1. Clean and normalize the text (fix typos, normalize punctuation)
-2. Ensure proper sentence structure and grammar
-3. Identify dialogue and format it clearly
-4. Add appropriate punctuation for natural pauses
-5. Remove any formatting artifacts (HTML tags, special characters that won't be read)
-6. Keep the meaning and content exactly the same - only improve formatting
-
-IMPORTANT:
-- Do NOT add content that wasn't in the original
-- Do NOT remove story content
-- Do NOT add narrator notes or stage directions
-- Output ONLY the formatted text, no explanations
+        return f"""Format the following text for audiobook narration. Output ONLY the formatted text, nothing else.
 
 Text to format:
-{text}
-
-Formatted text:"""
-        return prompt
+{text}"""
 
     def format_text(self, text: str, temperature: float = 0.3) -> str:
         """
@@ -73,21 +130,29 @@ Formatted text:"""
         if not text or not text.strip():
             return text
 
-        prompt = self._build_format_prompt(text)
+        system_prompt = self._get_system_prompt()
+        user_message = self._build_user_message(text)
 
         try:
             logger.info(f"Formatting text chunk ({len(text)} chars) with model {self.model}")
 
-            response = self.client.generate(
+            # Use chat API with system/user message separation
+            messages = [
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': user_message}
+            ]
+
+            response = self.client.chat(
                 model=self.model,
-                prompt=prompt,
+                messages=messages,
                 options={
                     'temperature': temperature,
                     'num_predict': self.max_tokens,
                 }
             )
 
-            formatted_text = response['response'].strip()
+            formatted_text = response['message']['content'].strip()
+
             logger.info(f"Successfully formatted chunk ({len(formatted_text)} chars)")
 
             return formatted_text

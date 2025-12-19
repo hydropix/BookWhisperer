@@ -3,11 +3,8 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = "postgresql://bookwhisperer:bookwhisperer_password@localhost:5432/bookwhisperer"
-
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
+    # Database (SQLite)
+    DATABASE_URL: str = "sqlite:///./bookwhisperer.db"
 
     # Ollama
     OLLAMA_URL: str = "http://localhost:11434"
@@ -26,10 +23,6 @@ class Settings(BaseSettings):
     # API
     API_V1_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "BookWhisperer"
-
-    # Celery
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
 
     # Logging
     LOG_LEVEL: str = "INFO"

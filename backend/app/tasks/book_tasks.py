@@ -1,7 +1,7 @@
 """
 Book Processing Tasks
 
-Celery tasks for parsing books and extracting chapters.
+Synchronous tasks for parsing books and extracting chapters.
 """
 
 import logging
@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import Dict
 from sqlalchemy.orm import Session
 
-from app.tasks.celery_app import celery_app
 from app.database import SessionLocal
 from app.models.book import Book
 from app.models.chapter import Chapter
@@ -21,12 +20,11 @@ from app.services.txt_parser import parse_txt
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name="tasks.parse_book")
-def parse_book_task(self, book_id: str):
+def parse_book_sync(book_id: str):
     """
-    Parse a book file and extract chapters.
+    Parse a book file and extract chapters (synchronous version).
 
-    This task:
+    This function:
     1. Loads the book from the database
     2. Determines the file type (EPUB or TXT)
     3. Parses the file using the appropriate parser
@@ -43,7 +41,7 @@ def parse_book_task(self, book_id: str):
     job = None
 
     try:
-        logger.info(f"Starting parse_book task for book_id: {book_id}")
+        logger.info(f"Starting parse_book_sync for book_id: {book_id}")
 
         # Get book from database
         book = db.query(Book).filter(Book.id == book_id).first()
@@ -54,7 +52,6 @@ def parse_book_task(self, book_id: str):
         job = ProcessingJob(
             book_id=book_id,
             job_type=JobType.PARSE_BOOK,
-            celery_task_id=self.request.id,
             status=JobStatus.RUNNING,
             progress_percent=0,
             started_at=datetime.utcnow()
@@ -66,15 +63,15 @@ def parse_book_task(self, book_id: str):
         book.status = "parsing"
         db.commit()
 
-        logger.info(f"Processing {book.file_type.upper()} file: {book.file_path}")
+        logger.info(f"Processing {book.file_type.value.upper()} file: {book.file_path}")
 
         # Parse based on file type
-        if book.file_type == "epub":
+        if book.file_type.value == "epub":
             result = parse_epub(book.file_path)
-        elif book.file_type == "txt":
+        elif book.file_type.value == "txt":
             result = parse_txt(book.file_path)
         else:
-            raise ValueError(f"Unsupported file type: {book.file_type}")
+            raise ValueError(f"Unsupported file type: {book.file_type.value}")
 
         # Update progress
         job.progress_percent = 50
@@ -85,7 +82,7 @@ def parse_book_task(self, book_id: str):
         if metadata:
             book.title = metadata.get("title", book.title)
             book.author = metadata.get("author", book.author)
-            book.metadata = metadata
+            book.book_metadata = metadata
 
         # Create chapter records
         chapters_data = result.get("chapters", [])
@@ -139,41 +136,7 @@ def parse_book_task(self, book_id: str):
 
         db.commit()
 
-        # Re-raise for Celery retry mechanism
         raise
 
     finally:
         db.close()
-
-
-@celery_app.task(bind=True, name="tasks.retry_parse_book", max_retries=3)
-def retry_parse_book_task(self, book_id: str):
-    """
-    Wrapper task for parse_book with retry logic.
-
-    Args:
-        book_id: UUID of the book to parse
-    """
-    try:
-        return parse_book_task(book_id)
-    except Exception as e:
-        logger.warning(f"Parse book failed, attempt {self.request.retries + 1}/3: {e}")
-
-        # Exponential backoff: 2^retry_count seconds
-        countdown = 2 ** self.request.retries
-
-        # Update retry count in database
-        db = SessionLocal()
-        try:
-            job = db.query(ProcessingJob).filter(
-                ProcessingJob.celery_task_id == self.request.id
-            ).first()
-
-            if job:
-                job.retry_count = self.request.retries + 1
-                db.commit()
-        finally:
-            db.close()
-
-        # Retry with exponential backoff
-        raise self.retry(exc=e, countdown=countdown)

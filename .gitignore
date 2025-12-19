@@ -38,7 +38,6 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
-nul
 
 # Storage
 backend/storage/uploads/*

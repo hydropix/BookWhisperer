@@ -24,7 +24,7 @@ class StorageService:
             tuple: (file_path, unique_filename)
         """
         # Ensure upload directory exists
-        upload_dir = Path(settings.UPLOAD_DIR)
+        upload_dir = Path(settings.UPLOAD_STORAGE_PATH)
         upload_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate unique filename
@@ -83,6 +83,6 @@ class StorageService:
         Returns:
             Path: Path to book's audio directory
         """
-        audio_dir = Path(settings.AUDIO_DIR) / str(book_id)
+        audio_dir = Path(settings.AUDIO_STORAGE_PATH) / str(book_id)
         audio_dir.mkdir(parents=True, exist_ok=True)
         return audio_dir

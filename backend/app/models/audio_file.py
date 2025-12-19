@@ -1,5 +1,4 @@
 from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -10,8 +9,8 @@ from app.database import Base
 class AudioFile(Base):
     __tablename__ = "audio_files"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chapter_id = Column(UUID(as_uuid=True), ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    chapter_id = Column(String(36), ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False)
     file_path = Column(String(1000), nullable=False)
     file_size = Column(Integer, nullable=False)  # in bytes
     duration_seconds = Column(Float)

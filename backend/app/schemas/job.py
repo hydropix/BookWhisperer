@@ -26,7 +26,7 @@ class ProcessingJobRead(ProcessingJobBase):
     error_message: Optional[str] = None
     retry_count: int
     max_retries: int
-    metadata: Dict[str, Any] = {}
+    job_metadata: Dict[str, Any] = {}
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
@@ -35,12 +35,21 @@ class ProcessingJobRead(ProcessingJobBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Alias for backwards compatibility
+JobRead = ProcessingJobRead
+
+
+class JobList(BaseModel):
+    jobs: list[ProcessingJobRead]
+    total: int
+
+
 class ProcessingJobUpdate(BaseModel):
     status: Optional[JobStatus] = None
     progress_percent: Optional[int] = None
     error_message: Optional[str] = None
     retry_count: Optional[int] = None
     celery_task_id: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    job_metadata: Optional[Dict[str, Any]] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
